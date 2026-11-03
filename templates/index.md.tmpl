@@ -1,0 +1,23 @@
+---
+page_title: "SpinupWP Provider"
+description: |-
+  Manage SpinupWP sites, HTTPS, basic auth and backups with Terraform.
+---
+
+# SpinupWP Provider
+
+Manage [SpinupWP](https://spinupwp.com) sites, HTTPS, basic auth and backups through the [SpinupWP REST API](https://api.spinupwp.com).
+
+Requires Terraform 1.11 or later (passwords are [write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments) arguments, never stored in state).
+
+## Authentication
+
+Create an API token in SpinupWP under **Account Settings → API Tokens**. Creating and changing sites needs a token with write access; the data sources only need read access.
+
+Set it with the `SPINUPWP_API_TOKEN` environment variable (recommended) or the `api_token` argument.
+
+## Example Usage
+
+{{ tffile "examples/provider/provider.tf" }}
+
+{{ .SchemaMarkdown | trimspace }}

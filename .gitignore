@@ -1,0 +1,16 @@
+# Build output
+/terraform-provider-spinupwp
+/dist/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+crash.log
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,38 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+{{ tffile "examples/resources/spinupwp_site/resource.tf" }}
+
+## What can change in place
+
+- `php_version`, `page_cache_enabled`, `cron_interval`, `basic_auth` and `backups` are updated in place.
+- `server_id`, `domain` and `site_user` can't change in SpinupWP: changing them **replaces** the site.
+- `installation_method`, `dns_provider_id`, `database` and `wordpress` are only used to create the site. Changing them later also replaces it.
+
+Replacing a site deletes it and creates an empty one. Use `lifecycle { prevent_destroy = true }` on sites you care about, and read plans carefully.
+
+When a site is destroyed, its database and backups are kept unless `delete_database` or `delete_backups` is `true`.
+
+HTTPS has its own resource, `spinupwp_site_https`: enabling it often fails until DNS points at the server, and a failure there never affects the site. `basic_auth` and `backups` are applied right after the site is created, so if they fail then, Terraform marks the new site as tainted and recreates it on the next apply.
+
+{{ .SchemaMarkdown | trimspace }}
+
+## Import
+
+Import a site by its SpinupWP ID (shown in the site's URL in the dashboard).
+
+{{ tffile "examples/resources/spinupwp_site/import-by-string-id.tf" }}
+
+{{ codefile "shell" "examples/resources/spinupwp_site/import.sh" }}
+
+SpinupWP doesn't return the create-only arguments, so after import they are recorded from your configuration on the next apply. That apply is an in-place update and never replaces the site. Basic auth and backups are read from SpinupWP; `password_wo` is only sent again when `password_wo_version` changes.
