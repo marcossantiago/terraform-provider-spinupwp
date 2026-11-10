@@ -1,3 +1,9 @@
+## 0.2.0 (unreleased)
+
+FEATURES:
+
+* **New resource:** `spinupwp_server`: connect and provision a custom server (any hosting provider) over SSH; removing it deletes the server from SpinupWP only.
+
 ## 0.1.0
 
 FEATURES:

@@ -45,7 +45,7 @@ func (p *spinupwpProvider) Metadata(_ context.Context, _ provider.MetadataReques
 
 func (p *spinupwpProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manage [SpinupWP](https://spinupwp.com) sites, HTTPS, basic auth and backups.",
+		Description: "Manage [SpinupWP](https://spinupwp.com) servers, sites, HTTPS, basic auth and backups.",
 		Attributes: map[string]schema.Attribute{
 			"api_token": schema.StringAttribute{
 				Description: "SpinupWP API token. Can also be set with the `" + envAPIToken + "` environment variable. " +
@@ -92,6 +92,7 @@ func (p *spinupwpProvider) Configure(ctx context.Context, req provider.Configure
 
 func (p *spinupwpProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
+		NewServerResource,
 		NewSiteResource,
 		NewSiteHTTPSResource,
 	}

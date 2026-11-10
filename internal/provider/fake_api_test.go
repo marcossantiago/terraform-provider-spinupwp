@@ -20,6 +20,7 @@ type fakeAPI struct {
 	servers       map[int64]map[string]any
 	sites         map[int64]map[string]any
 	lastCreate    map[string]string // form of the last POST /sites
+	lastServer    map[string]string // form of the last POST /servers/custom
 	lastDelete    map[string]string // query of the last DELETE /sites/{id}
 	lastHTTPS     map[string]string // form of the last HTTPS request
 	httpsCalls    int
@@ -128,8 +129,17 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 			list = append(list, f.servers[k])
 		}
 		reply(w, 200, map[string]any{"data": list, "pagination": map[string]any{"next": nil}})
+	case r.Method == http.MethodPost && r.URL.Path == "/servers/custom":
+		f.createServer(w, r)
 	case r.Method == http.MethodGet && parts[0] == "servers":
 		f.replyFound(w, f.servers[id])
+	case r.Method == http.MethodDelete && parts[0] == "servers" && len(parts) == 2:
+		if f.servers[id] == nil {
+			reply(w, 404, map[string]any{"message": "No query results"})
+			return
+		}
+		delete(f.servers, id)
+		reply(w, 200, f.event())
 	case r.Method == http.MethodPost && r.URL.Path == "/sites":
 		f.createSite(w, r)
 	case r.Method == http.MethodGet && parts[0] == "sites" && len(parts) == 2:
@@ -222,6 +232,31 @@ func (f *fakeAPI) createSite(w http.ResponseWriter, r *http.Request) {
 	f.sites[f.nextID] = site
 	f.lastCreate = form
 	reply(w, 200, map[string]any{"event_id": f.event()["event_id"], "data": site})
+}
+
+// createServer handles POST /servers/custom. The server is provisioned once its event is.
+func (f *fakeAPI) createServer(w http.ResponseWriter, r *http.Request) {
+	form := flatten(r.PostForm)
+	for _, k := range []string{"provider_name", "ubuntu_version", "ip_address", "username", "hostname"} {
+		if form[k] == "" {
+			reply(w, 422, map[string]any{"message": "The given data was invalid.",
+				"errors": map[string][]string{k: {"The " + k + " field is required."}}})
+			return
+		}
+	}
+	f.nextID++
+	server := map[string]any{"id": f.nextID, "name": form["hostname"], "provider_name": form["provider_name"],
+		"ip_address": form["ip_address"], "ubuntu_version": form["ubuntu_version"], "status": "provisioned",
+		"database": map[string]any{"server": "mysql-8.4", "host": "localhost"}}
+	f.servers[f.nextID] = server
+	f.lastServer = form
+	reply(w, 200, map[string]any{"event_id": f.event()["event_id"], "data": server})
+}
+
+func (f *fakeAPI) serverExists(id int64) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.servers[id] != nil
 }
 
 // backupSettings handles PUT /sites/{id}/backup-settings (a JSON body).

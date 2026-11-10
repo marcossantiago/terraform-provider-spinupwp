@@ -4,6 +4,7 @@ Manage [SpinupWP](https://spinupwp.com) sites with Terraform, through the [Spinu
 
 | Resource | Manages |
 |---|---|
+| `spinupwp_server` | Custom servers (any hosting provider), provisioned by SpinupWP over SSH |
 | `spinupwp_site` | Sites, with their PHP version, page cache, cron, basic auth and backups |
 | `spinupwp_site_https` | Let's Encrypt (webroot or DNS) or a custom certificate |
 | `spinupwp_server` (data source) | Look up a server by ID or name |
