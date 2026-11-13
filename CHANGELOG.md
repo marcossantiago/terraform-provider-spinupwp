@@ -1,3 +1,13 @@
+## Unreleased
+
+FEATURES:
+
+* `spinupwp_site`: new `public_folder` argument, the folder Nginx serves (e.g. `/public` for Laravel).
+
+BUG FIXES:
+
+* `spinupwp_site`: `database.password_wo` is no longer checked by the provider. Its checks printed the password in their error messages; SpinupWP now checks it.
+
 ## 0.2.0 (November 12, 2026)
 
 FEATURES:

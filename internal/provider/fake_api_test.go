@@ -64,7 +64,7 @@ func (f *fakeAPI) addSite(serverID int64, domain, user string) int64 {
 // newSite returns a site as SpinupWP reports it right after creation.
 func newSite(id, serverID int64, domain, user string) map[string]any {
 	return map[string]any{
-		"id": id, "server_id": serverID, "domain": domain, "site_user": user, "php_version": "8.3",
+		"id": id, "server_id": serverID, "domain": domain, "site_user": user, "php_version": "8.3", "public_folder": "/",
 		"is_wordpress": false, "status": "deployed", "page_cache": map[string]any{"enabled": false},
 		"cron":       map[string]any{"enabled": true, "interval": 1},
 		"https":      map[string]any{"enabled": false},
@@ -227,6 +227,9 @@ func (f *fakeAPI) createSite(w http.ResponseWriter, r *http.Request) {
 	f.nextID++
 	site := newSite(f.nextID, serverID, form["domain"], form["site_user"])
 	site["php_version"] = php
+	if form["public_folder"] != "" {
+		site["public_folder"] = strings.TrimSuffix(form["public_folder"], "/") + "/"
+	}
 	site["is_wordpress"] = strings.HasPrefix(form["installation_method"], "wp")
 	site["page_cache"] = map[string]any{"enabled": form["page_cache[enabled]"] == "true"}
 	f.sites[f.nextID] = site

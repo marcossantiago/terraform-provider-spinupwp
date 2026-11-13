@@ -15,6 +15,7 @@ type Site struct {
 	Domain        string    `json:"domain"`
 	SiteUser      string    `json:"site_user"`
 	PHPVersion    string    `json:"php_version"`
+	PublicFolder  string    `json:"public_folder"`
 	IsWordPress   bool      `json:"is_wordpress"`
 	DNSProviderID *int64    `json:"dns_provider_id"`
 	Status        string    `json:"status"`
@@ -44,6 +45,7 @@ type CreateSiteRequest struct {
 	SiteUser           string
 	InstallationMethod string
 	PHPVersion         string
+	PublicFolder       string
 	PageCacheEnabled   *bool
 	DNSProviderID      *int64
 	Database           *CreateSiteDatabase
@@ -73,6 +75,7 @@ func (r CreateSiteRequest) form() url.Values {
 	f.Set("site_user", r.SiteUser)
 	f.Set("installation_method", r.InstallationMethod)
 	setIfNotEmpty(f, "php_version", r.PHPVersion)
+	setIfNotEmpty(f, "public_folder", r.PublicFolder)
 	if r.PageCacheEnabled != nil {
 		f.Set("page_cache[enabled]", formBool(*r.PageCacheEnabled))
 	}

@@ -120,6 +120,7 @@ HTTPS has its own resource, `spinupwp_site_https`: enabling it often fails until
 - `dns_provider_id` (Number) ID of a team DNS provider. When set, SpinupWP points the domain's A record at the server and enables HTTPS with a DNS-validated Let's Encrypt certificate. Only used when the site is created; changing it replaces the site.
 - `page_cache_enabled` (Boolean) Whether the Nginx page cache is enabled. Can be changed in place.
 - `php_version` (String) PHP version, e.g. `8.3`. Defaults to SpinupWP's default. Can be changed in place.
+- `public_folder` (String) Folder Nginx serves, relative to the site's files directory, e.g. `/public` for Laravel. Unset keeps SpinupWP's default (`/`). Changing it replaces the site.
 - `timeouts` (Attributes) (see [below for nested schema](#nestedatt--timeouts))
 - `wordpress` (Attributes) WordPress install settings. Required when `installation_method` is a WordPress method. Only used when the site is created; changing it replaces the site. (see [below for nested schema](#nestedatt--wordpress))
 
@@ -225,7 +226,7 @@ Required:
 
 Optional:
 
-- `password_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Database password, with an uppercase letter, a lowercase letter, a number and a symbol. Write-only: never stored in state. SpinupWP generates one if unset.
+- `password_wo` (String, Sensitive, [Write-only](https://developer.hashicorp.com/terraform/language/resources/ephemeral#write-only-arguments)) Database password, checked by SpinupWP. Write-only: never stored in state. SpinupWP generates one if unset.
 - `table_prefix` (String) WordPress table prefix. SpinupWP generates one if unset.
 
 

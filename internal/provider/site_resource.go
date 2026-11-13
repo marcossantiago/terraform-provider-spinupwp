@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/terraform-plugin-framework-timeouts/resource/timeouts"
@@ -39,14 +40,6 @@ var (
 	wordPressInstallationMethods                                     = []string{"wp", "wp_subdirectory", "wp_subdomain"}
 	installationMethods                                              = append([]string{"blank"}, wordPressInstallationMethods...)
 	phpVersionPattern                                                = regexp.MustCompile(`^\d+\.\d+$`)
-
-	// SpinupWP's own rule for database passwords.
-	databasePasswordValidators = []validator.String{
-		stringvalidator.RegexMatches(regexp.MustCompile(`[A-Z]`), "must contain an uppercase letter"),
-		stringvalidator.RegexMatches(regexp.MustCompile(`[a-z]`), "must contain a lowercase letter"),
-		stringvalidator.RegexMatches(regexp.MustCompile(`[0-9]`), "must contain a number"),
-		stringvalidator.RegexMatches(regexp.MustCompile(`[^A-Za-z0-9]`), "must contain a symbol"),
-	}
 )
 
 // NewSiteResource returns the spinupwp_site resource.
@@ -63,6 +56,7 @@ type siteModel struct {
 	SiteUser           types.String        `tfsdk:"site_user"`
 	InstallationMethod types.String        `tfsdk:"installation_method"`
 	PHPVersion         types.String        `tfsdk:"php_version"`
+	PublicFolder       types.String        `tfsdk:"public_folder"`
 	PageCacheEnabled   types.Bool          `tfsdk:"page_cache_enabled"`
 	CronInterval       types.Int64         `tfsdk:"cron_interval"`
 	DNSProviderID      types.Int64         `tfsdk:"dns_provider_id"`
@@ -148,6 +142,18 @@ func (r *siteResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 				Validators:    []validator.String{stringvalidator.RegexMatches(phpVersionPattern, "must look like 8.3")},
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
+			"public_folder": schema.StringAttribute{
+				Description: "Folder Nginx serves, relative to the site's files directory, e.g. `/public` for Laravel. " +
+					"Unset keeps SpinupWP's default (`/`). Changing it replaces the site.",
+				Optional:   true,
+				Computed:   true,
+				Validators: []validator.String{stringvalidator.RegexMatches(regexp.MustCompile(`^/`), "must start with /")},
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+					samePublicFolder{},
+					stringplanmodifier.RequiresReplace(),
+				},
+			},
 			"page_cache_enabled": schema.BoolAttribute{
 				Description:   "Whether the Nginx page cache is enabled. Can be changed in place.",
 				Optional:      true,
@@ -191,12 +197,13 @@ func (r *siteResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 						Required:    true,
 					},
 					"password_wo": schema.StringAttribute{
-						Description: "Database password, with an uppercase letter, a lowercase letter, a number and a symbol. " +
-							"Write-only: never stored in state. SpinupWP generates one if unset.",
-						Optional:   true,
-						Sensitive:  true,
-						WriteOnly:  true,
-						Validators: databasePasswordValidators,
+						// No validators: SpinupWP checks the password, and stringvalidator's errors would
+						// print it.
+						Description: "Database password, checked by SpinupWP. Write-only: never stored in state. " +
+							"SpinupWP generates one if unset.",
+						Optional:  true,
+						Sensitive: true,
+						WriteOnly: true,
 					},
 					"table_prefix": schema.StringAttribute{
 						Description: "WordPress table prefix. SpinupWP generates one if unset.",
@@ -544,10 +551,37 @@ func applySite(ctx context.Context, m *siteModel, s *client.Site, diags *diag.Di
 	m.Domain = types.StringValue(s.Domain)
 	m.SiteUser = types.StringValue(s.SiteUser)
 	m.PHPVersion = types.StringValue(s.PHPVersion)
+	m.PublicFolder = publicFolder(m.PublicFolder, s.PublicFolder)
 	m.PageCacheEnabled = types.BoolValue(s.PageCache.Enabled)
 	m.Status = types.StringValue(s.Status)
 	m.IsWordPress = types.BoolValue(s.IsWordPress)
 	m.HTTPSEnabled = types.BoolValue(s.HTTPS.Enabled)
+}
+
+// publicFolder returns SpinupWP's public folder, keeping the configured spelling when it only
+// differs by a trailing slash: SpinupWP stores "/public" as "/public/".
+func publicFolder(current types.String, reported string) types.String {
+	if known(current) && strings.TrimSuffix(current.ValueString(), "/") == strings.TrimSuffix(reported, "/") {
+		return current
+	}
+	return types.StringValue(reported)
+}
+
+// samePublicFolder plans no change when the configured public folder only differs from the
+// state by a trailing slash, so that difference never replaces the site.
+type samePublicFolder struct{}
+
+func (samePublicFolder) Description(context.Context) string {
+	return "Ignores a trailing slash difference from the state."
+}
+
+func (m samePublicFolder) MarkdownDescription(ctx context.Context) string { return m.Description(ctx) }
+
+func (samePublicFolder) PlanModifyString(_ context.Context, req planmodifier.StringRequest, resp *planmodifier.StringResponse) {
+	if known(req.PlanValue) && known(req.StateValue) &&
+		strings.TrimSuffix(req.PlanValue.ValueString(), "/") == strings.TrimSuffix(req.StateValue.ValueString(), "/") {
+		resp.PlanValue = req.StateValue
+	}
 }
 
 // applyComputed fills the attributes still unknown from the create response, so a site
@@ -559,6 +593,7 @@ func applyComputed(m *siteModel, s *client.Site) {
 	if m.PHPVersion.IsUnknown() {
 		m.PHPVersion = types.StringValue(s.PHPVersion)
 	}
+	m.PublicFolder = publicFolder(m.PublicFolder, s.PublicFolder)
 	if m.PageCacheEnabled.IsUnknown() {
 		m.PageCacheEnabled = types.BoolValue(s.PageCache.Enabled)
 	}
@@ -574,6 +609,7 @@ func createRequest(plan, cfg siteModel) client.CreateSiteRequest {
 		SiteUser:           plan.SiteUser.ValueString(),
 		InstallationMethod: plan.InstallationMethod.ValueString(),
 		PHPVersion:         plan.PHPVersion.ValueString(),
+		PublicFolder:       plan.PublicFolder.ValueString(),
 		PageCacheEnabled:   knownPointer(plan.PageCacheEnabled, plan.PageCacheEnabled.ValueBool),
 		DNSProviderID:      knownPointer(plan.DNSProviderID, plan.DNSProviderID.ValueInt64),
 	}

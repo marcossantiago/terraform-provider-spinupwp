@@ -131,6 +131,56 @@ resource "spinupwp_site" "test" {
 	})
 }
 
+func TestSitePublicFolder(t *testing.T) {
+	api := newFakeAPI(t)
+	resource.UnitTest(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories,
+		Steps: []resource.TestStep{{
+			Config: api.providerConfig() + `
+resource "spinupwp_site" "test" {
+  server_id           = 1
+  domain              = "laravel.example.com"
+  site_user           = "laravel"
+  installation_method = "blank"
+  public_folder       = "/public"
+}
+`,
+			Check: resource.ComposeAggregateTestCheckFunc(
+				resource.TestCheckResourceAttr("spinupwp_site.test", "public_folder", "/public"),
+				func(*terraform.State) error {
+					if api.lastCreate["public_folder"] != "/public" {
+						return fmt.Errorf("public_folder not sent to the API: %v", api.lastCreate)
+					}
+					return nil
+				},
+			),
+		}, {
+			// A trailing slash difference isn't a change.
+			Config: api.providerConfig() + `
+resource "spinupwp_site" "test" {
+  server_id           = 1
+  domain              = "laravel.example.com"
+  site_user           = "laravel"
+  installation_method = "blank"
+  public_folder       = "/public/"
+}
+`,
+			PlanOnly: true,
+		}, {
+			// Unset keeps what SpinupWP reports instead of planning a replacement.
+			Config: api.providerConfig() + `
+resource "spinupwp_site" "test" {
+  server_id           = 1
+  domain              = "laravel.example.com"
+  site_user           = "laravel"
+  installation_method = "blank"
+}
+`,
+			PlanOnly: true,
+		}},
+	})
+}
+
 func TestSiteDomainChangeReplaces(t *testing.T) {
 	api := newFakeAPI(t)
 	cfg := func(domain string) string {
@@ -259,8 +309,6 @@ func TestSiteValidation(t *testing.T) {
 			err: "only used with a WordPress",
 		},
 		"unknown method": {body: `installation_method = "joomla"`, err: "value must be one of"},
-		"weak database password": {body: `installation_method = "blank"
-  database = { name = "x", username = "x", password_wo = "lowercase-only" }`, err: "must contain an uppercase letter"},
 		"bad php version": {body: `installation_method = "blank"
   php_version = "latest"`, err: "must look like 8.3"},
 	}
