@@ -460,7 +460,14 @@ func (r *siteResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	plan.ID = state.ID
+	planned := plan
 	r.refresh(ctx, &plan, &resp.Diagnostics)
+	// These only report on the site, and other resources change them in the same apply:
+	// spinupwp_site_https turns HTTPS on or off. The plan promised the prior values, so keep
+	// them; the next refresh records the new ones.
+	plan.HTTPSEnabled = planned.HTTPSEnabled
+	plan.Status = planned.Status
+	plan.IsWordPress = planned.IsWordPress
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 

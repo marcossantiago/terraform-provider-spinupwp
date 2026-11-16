@@ -1,3 +1,9 @@
+## 0.3.1 (Unreleased)
+
+BUG FIXES:
+
+* `spinupwp_site`: no more "Provider produced inconsistent result" when `spinupwp_site_https` turns HTTPS on or off in the same apply as a site change, e.g. after an import. `https_enabled`, `status` and `is_wordpress` keep their planned values on update; the next refresh records the new ones.
+
 ## 0.3.0 (November 13, 2026)
 
 FEATURES:

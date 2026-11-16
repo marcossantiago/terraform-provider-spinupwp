@@ -471,3 +471,43 @@ func TestSiteCreatedWithCronOff(t *testing.T) {
 		}},
 	})
 }
+
+// Changing HTTPS in the same apply as the site must not make the site's result inconsistent: the
+// HTTPS resource can change https_enabled after the site's plan was made.
+func TestSiteUpdateWhileHTTPSChanges(t *testing.T) {
+	api := newFakeAPI(t)
+	site := func(pageCache string) string {
+		return api.providerConfig() + `
+resource "spinupwp_site" "test" {
+  server_id           = 1
+  domain              = "feature.example.com"
+  site_user           = "feature"
+  installation_method = "blank"
+  page_cache_enabled  = ` + pageCache + `
+}
+`
+	}
+	resource.UnitTest(t, resource.TestCase{
+		TerraformVersionChecks:   requireWriteOnlySupport,
+		ProtoV6ProviderFactories: protoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: site("false") + `
+resource "spinupwp_site_https" "test" {
+  site_id = spinupwp_site.test.id
+  type    = "webroot"
+}
+`},
+			{
+				Config: site("true"),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("spinupwp_site.test", tfjsonpath.New("page_cache_enabled"), knownvalue.Bool(true)),
+				},
+			},
+			{
+				// The next refresh records HTTPS as off
+				Config:   site("true"),
+				PlanOnly: true,
+			},
+		},
+	})
+}
