@@ -1,3 +1,9 @@
+## 0.4.0 (Unreleased)
+
+FEATURES:
+
+* `spinupwp_site`: new `additional_domains` argument, the site's additional domains, each served by the site or redirected. When set, domains added outside Terraform are removed; when unset, they're left alone.
+
 ## 0.3.1 (November 16, 2026)
 
 BUG FIXES:

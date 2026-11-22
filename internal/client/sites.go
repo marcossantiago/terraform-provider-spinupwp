@@ -25,6 +25,8 @@ type Site struct {
 	BasicAuth     BasicAuth `json:"basic_auth"`
 	Backups       Backups   `json:"backups"`
 	Database      *Database `json:"database"`
+
+	AdditionalDomains []SiteDomain `json:"additional_domains"`
 }
 
 // Toggle is a feature that can be enabled or disabled.

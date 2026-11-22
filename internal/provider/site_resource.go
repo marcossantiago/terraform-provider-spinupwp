@@ -50,26 +50,27 @@ type siteResource struct {
 }
 
 type siteModel struct {
-	ID                 types.String        `tfsdk:"id"`
-	ServerID           types.Int64         `tfsdk:"server_id"`
-	Domain             types.String        `tfsdk:"domain"`
-	SiteUser           types.String        `tfsdk:"site_user"`
-	InstallationMethod types.String        `tfsdk:"installation_method"`
-	PHPVersion         types.String        `tfsdk:"php_version"`
-	PublicFolder       types.String        `tfsdk:"public_folder"`
-	PageCacheEnabled   types.Bool          `tfsdk:"page_cache_enabled"`
-	CronInterval       types.Int64         `tfsdk:"cron_interval"`
-	DNSProviderID      types.Int64         `tfsdk:"dns_provider_id"`
-	Database           *siteDatabaseModel  `tfsdk:"database"`
-	WordPress          *siteWordPressModel `tfsdk:"wordpress"`
-	BasicAuth          *siteBasicAuthModel `tfsdk:"basic_auth"`
-	Backups            *siteBackupsModel   `tfsdk:"backups"`
-	DeleteDatabase     types.Bool          `tfsdk:"delete_database"`
-	DeleteBackups      types.Bool          `tfsdk:"delete_backups"`
-	Status             types.String        `tfsdk:"status"`
-	IsWordPress        types.Bool          `tfsdk:"is_wordpress"`
-	HTTPSEnabled       types.Bool          `tfsdk:"https_enabled"`
-	Timeouts           timeouts.Value      `tfsdk:"timeouts"`
+	ID                 types.String               `tfsdk:"id"`
+	ServerID           types.Int64                `tfsdk:"server_id"`
+	Domain             types.String               `tfsdk:"domain"`
+	SiteUser           types.String               `tfsdk:"site_user"`
+	InstallationMethod types.String               `tfsdk:"installation_method"`
+	PHPVersion         types.String               `tfsdk:"php_version"`
+	PublicFolder       types.String               `tfsdk:"public_folder"`
+	PageCacheEnabled   types.Bool                 `tfsdk:"page_cache_enabled"`
+	CronInterval       types.Int64                `tfsdk:"cron_interval"`
+	DNSProviderID      types.Int64                `tfsdk:"dns_provider_id"`
+	Database           *siteDatabaseModel         `tfsdk:"database"`
+	WordPress          *siteWordPressModel        `tfsdk:"wordpress"`
+	BasicAuth          *siteBasicAuthModel        `tfsdk:"basic_auth"`
+	Backups            *siteBackupsModel          `tfsdk:"backups"`
+	AdditionalDomains  map[string]siteDomainModel `tfsdk:"additional_domains"`
+	DeleteDatabase     types.Bool                 `tfsdk:"delete_database"`
+	DeleteBackups      types.Bool                 `tfsdk:"delete_backups"`
+	Status             types.String               `tfsdk:"status"`
+	IsWordPress        types.Bool                 `tfsdk:"is_wordpress"`
+	HTTPSEnabled       types.Bool                 `tfsdk:"https_enabled"`
+	Timeouts           timeouts.Value             `tfsdk:"timeouts"`
 }
 
 type siteDatabaseModel struct {
@@ -241,8 +242,9 @@ func (r *siteResource) Schema(ctx context.Context, _ resource.SchemaRequest, res
 					},
 				},
 			},
-			"basic_auth": basicAuthAttribute(),
-			"backups":    backupsAttribute(),
+			"basic_auth":         basicAuthAttribute(),
+			"backups":            backupsAttribute(),
+			"additional_domains": additionalDomainsAttribute(),
 			"delete_database": schema.BoolAttribute{
 				Description: "Delete the site's database when the site is destroyed. Defaults to `false`.",
 				Optional:    true,
@@ -368,7 +370,7 @@ func (r *siteResource) Create(ctx context.Context, req resource.CreateRequest, r
 	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
-// syncFeatures applies cron and the basic_auth and backups blocks.
+// syncFeatures applies cron, additional_domains and the basic_auth and backups blocks.
 func (r *siteResource) syncFeatures(ctx context.Context, id int64, plan, state, cfg siteModel, backupsChanged bool) error {
 	if err := r.syncBasicAuth(ctx, id, plan.BasicAuth, state.BasicAuth, cfg.BasicAuth); err != nil {
 		return fmt.Errorf("basic auth: %w", err)
@@ -379,6 +381,9 @@ func (r *siteResource) syncFeatures(ctx context.Context, id int64, plan, state, 
 	}
 	if err := r.syncCron(ctx, site, plan.CronInterval); err != nil {
 		return fmt.Errorf("cron: %w", err)
+	}
+	if err := r.syncDomains(ctx, site, plan.AdditionalDomains); err != nil {
+		return fmt.Errorf("additional domains: %w", err)
 	}
 	if plan.Backups == nil && state.Backups == nil {
 		return nil
@@ -553,6 +558,7 @@ func (r *siteResource) syncCron(ctx context.Context, site *client.Site, planned 
 func applySite(ctx context.Context, m *siteModel, s *client.Site, diags *diag.Diagnostics) {
 	m.BasicAuth = basicAuthFromSite(s, m.BasicAuth)
 	m.Backups = backupsFromSite(ctx, s, m.Backups, diags)
+	m.AdditionalDomains = domainsFromSite(s, m.AdditionalDomains)
 	m.CronInterval = types.Int64Value(s.Cron.Minutes())
 	m.ServerID = types.Int64Value(s.ServerID)
 	m.Domain = types.StringValue(s.Domain)

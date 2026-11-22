@@ -66,6 +66,18 @@ resource "spinupwp_site" "blog" {
     }
   }
 
+  # Served by the site, or redirected (to the primary domain unless destination is set).
+  # The HTTPS certificate must cover them too.
+  additional_domains = {
+    "www.example.com" = {}
+    "old.example.com" = {
+      redirect = {
+        type        = 301
+        destination = "$scheme://example.com$request_uri"
+      }
+    }
+  }
+
   # A typo in domain or site_user would replace (delete) the site.
   lifecycle {
     prevent_destroy = true

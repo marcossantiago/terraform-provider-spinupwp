@@ -423,3 +423,68 @@ func selfSignedCert(t *testing.T, domain string) (certPEM, keyPEM string) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})),
 		string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
 }
+
+// TestAccSiteAdditionalDomains adds, changes and removes additional domains on a blank site
+// without a database.
+func TestAccSiteAdditionalDomains(t *testing.T) {
+	server := accServer(t)
+	name := "tfacc" + acctest.RandString(8)
+	cfg := func(domains string) string {
+		return fmt.Sprintf(`
+data "spinupwp_server" "test" { name = %q }
+
+resource "spinupwp_site" "test" {
+  server_id           = data.spinupwp_server.test.id
+  domain              = "%s.example.com"
+  site_user           = %q
+  installation_method = "blank"
+  %s
+}
+`, server, name, name, domains)
+	}
+	domains := tfjsonpath.New("additional_domains")
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: cfg(fmt.Sprintf(`additional_domains = {
+    "www.%[1]s.example.com" = {}
+    "old.%[1]s.example.com" = { redirect = {} }
+  }`, name)),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("spinupwp_site.test", domains.AtMapKey("www."+name+".example.com").AtMapKey("redirect"), knownvalue.Null()),
+					statecheck.ExpectKnownValue("spinupwp_site.test", domains.AtMapKey("old."+name+".example.com").AtMapKey("redirect").AtMapKey("type"), knownvalue.Int64Exact(301)),
+				},
+			},
+			{
+				Config: cfg(fmt.Sprintf(`additional_domains = {
+    "old.%[1]s.example.com" = {
+      redirect = {
+        type        = 302
+        destination = "$scheme://example.org$request_uri"
+      }
+    }
+  }`, name)),
+				ConfigPlanChecks: resource.ConfigPlanChecks{
+					PreApply: []plancheck.PlanCheck{plancheck.ExpectResourceAction("spinupwp_site.test", plancheck.ResourceActionUpdate)},
+				},
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("spinupwp_site.test", domains, knownvalue.MapExact(map[string]knownvalue.Check{
+						"old." + name + ".example.com": knownvalue.ObjectExact(map[string]knownvalue.Check{
+							"redirect": knownvalue.ObjectExact(map[string]knownvalue.Check{
+								"type":        knownvalue.Int64Exact(302),
+								"destination": knownvalue.StringExact("$scheme://example.org$request_uri"),
+							}),
+						}),
+					})),
+				},
+			},
+			{
+				Config: cfg(`additional_domains = {}`),
+				ConfigStateChecks: []statecheck.StateCheck{
+					statecheck.ExpectKnownValue("spinupwp_site.test", domains, knownvalue.MapExact(map[string]knownvalue.Check{})),
+				},
+			},
+		},
+	})
+}

@@ -15,7 +15,7 @@ description: |-
 
 ## What can change in place
 
-- `php_version`, `page_cache_enabled`, `cron_interval`, `basic_auth` and `backups` are updated in place.
+- `php_version`, `page_cache_enabled`, `cron_interval`, `basic_auth`, `backups` and `additional_domains` are updated in place.
 - `server_id`, `domain` and `site_user` can't change in SpinupWP: changing them **replaces** the site.
 - `installation_method`, `dns_provider_id`, `database` and `wordpress` are only used to create the site. Changing them later also replaces it.
 
@@ -23,7 +23,9 @@ Replacing a site deletes it and creates an empty one. Use `lifecycle { prevent_d
 
 When a site is destroyed, its database and backups are kept unless `delete_database` or `delete_backups` is `true`.
 
-HTTPS has its own resource, `spinupwp_site_https`: enabling it often fails until DNS points at the server, and a failure there never affects the site. `basic_auth` and `backups` are applied right after the site is created, so if they fail then, Terraform marks the new site as tainted and recreates it on the next apply.
+HTTPS has its own resource, `spinupwp_site_https`: enabling it often fails until DNS points at the server, and a failure there never affects the site. `basic_auth`, `backups` and `additional_domains` are applied right after the site is created, so if they fail then, Terraform marks the new site as tainted and recreates it on the next apply.
+
+`additional_domains` is authoritative only when it's set: with it, a domain added in the SpinupWP dashboard shows up as a change and the next apply removes it. Leave it unset on sites whose additional domains are managed elsewhere. Importing a site leaves it unset; adding it to the configuration afterwards adopts the existing domains and only changes what differs.
 
 {{ .SchemaMarkdown | trimspace }}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -25,6 +26,8 @@ type fakeAPI struct {
 	lastHTTPS     map[string]string // form of the last HTTPS request
 	httpsCalls    int
 	lastBasicAuth map[string]string // form of the last basic auth request
+	lastDomain    map[string]string // form of the last domain request
+	domainCalls   int
 	failNextEvent bool
 	failedEvents  map[int64]bool
 	nextID        int64
@@ -66,10 +69,11 @@ func newSite(id, serverID int64, domain, user string) map[string]any {
 	return map[string]any{
 		"id": id, "server_id": serverID, "domain": domain, "site_user": user, "php_version": "8.3", "public_folder": "/",
 		"is_wordpress": false, "status": "deployed", "page_cache": map[string]any{"enabled": false},
-		"cron":       map[string]any{"enabled": true, "interval": 1},
-		"https":      map[string]any{"enabled": false},
-		"basic_auth": map[string]any{"enabled": false, "username": nil},
-		"database":   map[string]any{"id": id + 1000, "table_prefix": "wp_"},
+		"cron":               map[string]any{"enabled": true, "interval": 1},
+		"https":              map[string]any{"enabled": false},
+		"basic_auth":         map[string]any{"enabled": false, "username": nil},
+		"database":           map[string]any{"id": id + 1000, "table_prefix": "wp_"},
+		"additional_domains": []map[string]any{},
 		"backups": map[string]any{
 			"database": false, "paths_to_exclude": "node_modules\n/files/vendor", "storage_provider": nil,
 			"schedule": map[string]any{
@@ -190,6 +194,8 @@ func (f *fakeAPI) handle(w http.ResponseWriter, r *http.Request) {
 			f.sites[id]["basic_auth"] = map[string]any{"enabled": true, "username": r.PostForm.Get("username")}
 		}
 		reply(w, 200, f.event())
+	case len(parts) >= 3 && parts[2] == "domains":
+		f.siteDomains(w, r, f.sites[id], parts)
 	case r.Method == http.MethodPut && len(parts) == 3 && parts[2] == "backup-settings":
 		f.backupSettings(w, r, f.sites[id])
 	case r.Method == http.MethodPut && len(parts) == 3 && parts[2] == "backup-schedule":
@@ -298,6 +304,82 @@ func (f *fakeAPI) backupSchedule(w http.ResponseWriter, r *http.Request, site ma
 		}
 	}
 	reply(w, 200, map[string]any{"data": site})
+}
+
+// siteDomains serves /sites/{id}/domains[/{domain_id}], changing the site's additional_domains.
+// Like the real API, there's no GET for one domain.
+func (f *fakeAPI) siteDomains(w http.ResponseWriter, r *http.Request, site map[string]any, parts []string) {
+	if site == nil {
+		reply(w, 404, map[string]any{"message": "No query results"})
+		return
+	}
+	f.lastDomain = flatten(r.PostForm)
+	f.domainCalls++
+	redirect := func() map[string]any {
+		if r.PostForm.Get("redirect[enabled]") != "1" {
+			return map[string]any{"enabled": false, "type": 301, "destination": nil}
+		}
+		typ, _ := strconv.Atoi(r.PostForm.Get("redirect[type]"))
+		if typ == 0 {
+			typ = 301
+		}
+		dest := r.PostForm.Get("redirect[destination]")
+		if dest == "" {
+			dest = site["domain"].(string)
+		}
+		return map[string]any{"enabled": true, "type": typ, "destination": dest}
+	}
+	list := site["additional_domains"].([]map[string]any)
+	switch {
+	case r.Method == http.MethodPost && len(parts) == 3:
+		for _, d := range list {
+			if d["domain"] == r.PostForm.Get("domain") {
+				reply(w, 422, map[string]any{"message": "The domain has already been taken."})
+				return
+			}
+		}
+		f.nextID++
+		site["additional_domains"] = append(list, map[string]any{"id": f.nextID, "domain": r.PostForm.Get("domain"), "redirect": redirect()})
+		reply(w, 200, f.event())
+	case len(parts) == 4 && (r.Method == http.MethodPut || r.Method == http.MethodDelete):
+		domainID, _ := strconv.ParseInt(parts[3], 10, 64)
+		for i, d := range list {
+			if d["id"] != domainID {
+				continue
+			}
+			if r.Method == http.MethodDelete {
+				site["additional_domains"] = append(list[:i:i], list[i+1:]...)
+			} else {
+				d["redirect"] = redirect()
+			}
+			reply(w, 200, f.event())
+			return
+		}
+		reply(w, 404, map[string]any{"message": "No query results"})
+	default:
+		reply(w, 405, map[string]any{"message": "method not allowed"})
+	}
+}
+
+// addDomain adds an additional domain directly, as if it was added in the SpinupWP dashboard.
+func (f *fakeAPI) addDomain(domain string) {
+	f.withOnlySite(func(site map[string]any) {
+		f.nextID++
+		site["additional_domains"] = append(site["additional_domains"].([]map[string]any),
+			map[string]any{"id": f.nextID, "domain": domain, "redirect": map[string]any{"enabled": false, "type": 301, "destination": nil}})
+	})
+}
+
+// domainNames lists the only site's additional domains.
+func (f *fakeAPI) domainNames() []string {
+	var names []string
+	f.withOnlySite(func(site map[string]any) {
+		for _, d := range site["additional_domains"].([]map[string]any) {
+			names = append(names, d["domain"].(string))
+		}
+	})
+	sort.Strings(names)
+	return names
 }
 
 func (f *fakeAPI) event() map[string]any {
