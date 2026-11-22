@@ -1,4 +1,4 @@
-## 0.4.0 (Unreleased)
+## 0.4.0 (November 22, 2026)
 
 FEATURES:
 
